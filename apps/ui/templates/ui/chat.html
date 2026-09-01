@@ -1,15 +1,143 @@
 {% extends "ui/base.html" %}
+{% load static %}
 
 {% block title %}Chat — ProjectLens{% endblock %}
 
+{% block extra_head %}
+<style>
+  [x-cloak] { display: none !important; }
+  .chat-bubble p { margin-bottom: 0.5rem; }
+  .chat-bubble p:last-child { margin-bottom: 0; }
+  textarea.chat-input {
+    resize: none;
+    max-height: 120px;
+    field-sizing: content;
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="flex h-full">
+<div class="flex h-full"
+     x-data="{
+       sessionId: null,
+       messages: [],
+       sessions: [],
+       activeSessionIndex: -1,
+       question: '',
+       sending: false,
+       error: '',
+       csrfToken: '{{ csrf_token }}',
+
+       get currentTitle() {
+         const first = this.messages.find(m => m.role === 'user');
+         if (first) {
+           return first.content.length > 40 ? first.content.substring(0, 40) + '...' : first.content;
+         }
+         return 'New Conversation';
+       },
+
+       async sendMessage() {
+         const q = this.question.trim();
+         if (!q || this.sending) return;
+
+         this.error = '';
+         this.question = '';
+         this.messages.push({ role: 'user', content: q, citations: [] });
+         this.sending = true;
+         this.$nextTick(() => this.scrollToBottom());
+
+         try {
+           const resp = await fetch('/api/chat/', {
+             method: 'POST',
+             headers: {
+               'Content-Type': 'application/json',
+               'X-CSRFToken': this.csrfToken,
+             },
+             body: JSON.stringify({
+               question: q,
+               session_id: this.sessionId,
+             }),
+           });
+
+           if (!resp.ok) {
+             const data = await resp.json().catch(() => ({}));
+             this.error = data.detail || data.question?.[0] || 'Something went wrong. Please try again.';
+             return;
+           }
+
+           const data = await resp.json();
+           this.sessionId = data.session_id;
+           this.messages.push({
+             role: 'assistant',
+             content: data.answer,
+             citations: data.citations || [],
+           });
+
+           this.syncCurrentSession();
+         } catch (e) {
+           this.error = 'Network error. Please try again.';
+         } finally {
+           this.sending = false;
+           this.$nextTick(() => this.scrollToBottom());
+         }
+       },
+
+       syncCurrentSession() {
+         if (this.activeSessionIndex >= 0 && this.activeSessionIndex < this.sessions.length) {
+           this.sessions[this.activeSessionIndex].messages = [...this.messages];
+           this.sessions[this.activeSessionIndex].sessionId = this.sessionId;
+           this.sessions[this.activeSessionIndex].title = this.currentTitle;
+         } else if (this.messages.length > 0) {
+           this.sessions.push({
+             sessionId: this.sessionId,
+             title: this.currentTitle,
+             messages: [...this.messages],
+           });
+           this.activeSessionIndex = this.sessions.length - 1;
+         }
+       },
+
+       newConversation() {
+         this.syncCurrentSession();
+         this.sessionId = null;
+         this.messages = [];
+         this.error = '';
+         this.question = '';
+         this.activeSessionIndex = -1;
+       },
+
+       switchSession(index) {
+         if (index === this.activeSessionIndex) return;
+         this.syncCurrentSession();
+         const session = this.sessions[index];
+         this.sessionId = session.sessionId;
+         this.messages = [...session.messages];
+         this.activeSessionIndex = index;
+         this.error = '';
+         this.question = '';
+         this.$nextTick(() => this.scrollToBottom());
+       },
+
+       handleKeydown(e) {
+         if (e.key === 'Enter' && !e.shiftKey) {
+           e.preventDefault();
+           this.sendMessage();
+         }
+       },
+
+       scrollToBottom() {
+         const el = this.$refs.messagesContainer;
+         if (el) el.scrollTop = el.scrollHeight;
+       },
+     }">
 
   <!-- Chat History Sidebar -->
   <div class="w-80 border-r border-gray-200 bg-white flex flex-col flex-shrink-0">
     <div class="flex items-center justify-between px-5 py-4">
       <h2 class="text-lg font-semibold text-gray-900">Chat History</h2>
-      <button class="w-8 h-8 flex items-center justify-center rounded-full bg-brand-500 text-white hover:bg-brand-600 transition-colors">
+      <button @click="newConversation()"
+              class="w-8 h-8 flex items-center justify-center rounded-full bg-brand-500 text-white hover:bg-brand-600 transition-colors"
+              title="New conversation">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
         </svg>
@@ -17,11 +145,35 @@
     </div>
 
     <div class="flex-1 overflow-auto px-3 pb-3 space-y-1.5 scrollbar-thin">
-      <!-- Placeholder sessions -->
-      <div class="px-3 py-3 rounded-lg bg-brand-50 border-l-[3px] border-brand-500 cursor-pointer">
-        <p class="text-sm font-medium text-gray-900">New Conversation</p>
-        <p class="text-xs text-brand-500 mt-0.5 font-medium">● Active</p>
-      </div>
+      <!-- Current unsaved conversation -->
+      <template x-if="activeSessionIndex === -1">
+        <div class="px-3 py-3 rounded-lg bg-brand-50 border-l-[3px] border-brand-500 cursor-pointer">
+          <p class="text-sm font-medium text-gray-900 truncate" x-text="currentTitle">New Conversation</p>
+          <p class="text-xs text-brand-500 mt-0.5 font-medium">● Active</p>
+        </div>
+      </template>
+
+      <!-- New conversation button when viewing a saved session -->
+      <template x-if="activeSessionIndex >= 0">
+        <div @click="newConversation()"
+             class="px-3 py-3 rounded-lg hover:bg-gray-50 cursor-pointer transition-colors border-l-[3px] border-transparent">
+          <p class="text-sm font-medium text-gray-500">+ New Conversation</p>
+        </div>
+      </template>
+
+      <!-- Saved sessions -->
+      <template x-for="(session, index) in sessions" :key="index">
+        <div @click="switchSession(index)"
+             class="px-3 py-3 rounded-lg cursor-pointer transition-colors"
+             :class="index === activeSessionIndex
+               ? 'bg-brand-50 border-l-[3px] border-brand-500'
+               : 'hover:bg-gray-50 border-l-[3px] border-transparent'">
+          <p class="text-sm font-medium text-gray-900 truncate" x-text="session.title"></p>
+          <p class="text-xs mt-0.5 font-medium"
+             :class="index === activeSessionIndex ? 'text-brand-500' : 'text-gray-400'"
+             x-text="index === activeSessionIndex ? '● Active' : session.messages.length + ' messages'"></p>
+        </div>
+      </template>
     </div>
   </div>
 
@@ -30,16 +182,17 @@
     <!-- Chat Header -->
     <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
       <div>
-        <h1 class="text-xl font-semibold text-gray-900">New Conversation</h1>
+        <h1 class="text-xl font-semibold text-gray-900 truncate" x-text="currentTitle">New Conversation</h1>
         <p class="text-sm text-gray-400">ProjectLens AI</p>
       </div>
     </div>
 
     <!-- Messages Area -->
-    <div class="flex-1 overflow-auto px-6 py-6 scrollbar-thin">
+    <div class="flex-1 overflow-auto px-6 py-6 scrollbar-thin" x-ref="messagesContainer">
       <div class="max-w-3xl mx-auto">
+
         <!-- Empty state -->
-        <div class="flex flex-col items-center justify-center h-full text-center py-20">
+        <div x-show="messages.length === 0 && !sending" class="flex flex-col items-center justify-center text-center py-20">
           <div class="w-16 h-16 rounded-full bg-brand-50 flex items-center justify-center mb-4">
             <svg class="w-8 h-8 text-brand-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
@@ -49,6 +202,102 @@
           <h3 class="text-lg font-medium text-gray-900 mb-1">Ask a question about your documents</h3>
           <p class="text-sm text-gray-400 max-w-md">Upload documents in the Document Library, then ask questions here. Answers are grounded in your documents with source citations.</p>
         </div>
+
+        <!-- Messages -->
+        <div class="space-y-6">
+          <template x-for="(msg, i) in messages" :key="i">
+            <div>
+              <!-- User message -->
+              <template x-if="msg.role === 'user'">
+                <div class="flex justify-end gap-3">
+                  <div class="max-w-lg">
+                    <div class="flex items-center justify-end gap-2 mb-1.5">
+                      <span class="text-sm font-medium text-gray-700">You</span>
+                      <div class="w-7 h-7 rounded-full bg-gray-200 flex items-center justify-center">
+                        <svg class="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75"
+                                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                        </svg>
+                      </div>
+                    </div>
+                    <div class="bg-gray-800 text-white px-4 py-3 rounded-2xl rounded-tr-md text-sm leading-relaxed"
+                         x-text="msg.content"></div>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Assistant message -->
+              <template x-if="msg.role === 'assistant'">
+                <div class="flex gap-3">
+                  <div class="max-w-2xl">
+                    <div class="flex items-center gap-2 mb-1.5">
+                      <div class="w-7 h-7 rounded-full bg-brand-50 flex items-center justify-center">
+                        <img src="{% static 'ui/images/logo.png' %}" alt="" class="w-4 h-4 object-contain">
+                      </div>
+                      <span class="text-sm font-medium text-gray-700">ProjectLens</span>
+                    </div>
+                    <div class="border-l-[3px] border-brand-500 pl-4">
+                      <div class="chat-bubble text-sm text-gray-700 leading-relaxed whitespace-pre-wrap"
+                           x-text="msg.content"></div>
+
+                      <!-- Citations -->
+                      <template x-if="msg.citations && msg.citations.length > 0">
+                        <div class="mt-4 pt-3 border-t border-gray-100">
+                          <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Sources</p>
+                          <div class="flex flex-wrap gap-2">
+                            <template x-for="(cite, ci) in msg.citations" :key="ci">
+                              <span class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
+                                <svg class="w-3.5 h-3.5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+                                </svg>
+                                <span x-text="cite.source"></span>
+                                <span class="text-gray-300">|</span>
+                                <span class="text-gray-400" x-text="'Page ' + cite.page"></span>
+                              </span>
+                            </template>
+                          </div>
+                        </div>
+                      </template>
+                    </div>
+                  </div>
+                </div>
+              </template>
+            </div>
+          </template>
+
+          <!-- Loading indicator -->
+          <div x-show="sending" x-cloak class="flex gap-3">
+            <div class="max-w-2xl">
+              <div class="flex items-center gap-2 mb-1.5">
+                <div class="w-7 h-7 rounded-full bg-brand-50 flex items-center justify-center">
+                  <img src="{% static 'ui/images/logo.png' %}" alt="" class="w-4 h-4 object-contain">
+                </div>
+                <span class="text-sm font-medium text-gray-700">ProjectLens</span>
+              </div>
+              <div class="border-l-[3px] border-brand-500 pl-4">
+                <div class="flex items-center gap-2 text-sm text-gray-400">
+                  <span class="flex gap-1">
+                    <span class="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+                    <span class="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+                    <span class="w-1.5 h-1.5 bg-brand-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+                  </span>
+                  Searching documents...
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Error banner -->
+    <div x-show="error" x-cloak class="px-6">
+      <div class="max-w-3xl mx-auto mb-2 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+        <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+        </svg>
+        <span x-text="error"></span>
+        <button @click="error = ''" class="ml-auto text-red-400 hover:text-red-600">&times;</button>
       </div>
     </div>
 
@@ -57,17 +306,16 @@
       <div class="max-w-3xl mx-auto">
         <div class="flex items-end gap-3">
           <div class="flex-1 relative">
-            <input type="text" placeholder="Ask a question about your documents..."
-                   class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 pr-12"
-                   disabled>
-            <button class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 text-gray-400" disabled>
-              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75"
-                      d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/>
-              </svg>
-            </button>
+            <textarea x-model="question"
+                      @keydown="handleKeydown($event)"
+                      placeholder="Ask a question about your documents..."
+                      rows="1"
+                      class="chat-input w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
+                      :disabled="sending"></textarea>
           </div>
-          <button class="flex items-center justify-center w-11 h-11 rounded-xl bg-brand-500 text-white hover:bg-brand-600 transition-colors flex-shrink-0" disabled>
+          <button @click="sendMessage()"
+                  :disabled="!question.trim() || sending"
+                  class="flex items-center justify-center w-11 h-11 rounded-xl bg-brand-500 text-white hover:bg-brand-600 transition-colors flex-shrink-0 disabled:opacity-50 disabled:cursor-not-allowed">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                     d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/>
