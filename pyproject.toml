@@ -1,0 +1,33 @@
+[project]
+name = "projectlens"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Bintang Romadhon", email = "bintang.arema@gmail.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "celery>=5.6.3",
+    "chromadb>=1.5.9",
+    "django>=6.1",
+    "djangorestframework>=3.18.0",
+    "google-genai>=2.21.0",
+    "psycopg[binary]>=3.3.5",
+    "pymupdf>=1.28.2",
+    "python-dotenv>=1.2.3",
+    "redis>=8.1.0",
+]
+
+[project.scripts]
+projectlens = "projectlens:main"
+
+[build-system]
+requires = ["uv_build>=0.12.8,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+    "pytest-django>=4.14.0",
+]
