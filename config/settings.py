@@ -121,3 +121,7 @@ EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
 # Retrieval
 
 RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "5"))
+
+# Document upload
+
+MAX_UPLOAD_SIZE = int(os.getenv("MAX_UPLOAD_SIZE", str(50 * 1024 * 1024)))  # 50 MB
