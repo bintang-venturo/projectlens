@@ -90,6 +90,7 @@ The full list of environment variables:
 | `CHUNK_OVERLAP` | `150` | Character overlap between chunks |
 | `RETRIEVAL_K` | `5` | Number of chunks retrieved per query |
 | `MAX_UPLOAD_SIZE` | `52428800` | Maximum upload file size in bytes (50 MB) |
+| `CHAT_HISTORY_LIMIT` | `10` | Maximum number of prior messages included in chat context |
 
 ### 4. Install dependencies
 
@@ -171,6 +172,7 @@ Response:
 
 ```json
 {
+  "session_id": "a1b2c3d4-...",
   "answer": "Each player starts with $1,500.",
   "citations": [
     {
@@ -183,6 +185,18 @@ Response:
 
 The answer is generated using only the content from your uploaded documents. Citations point to the exact source file and page number.
 
+### Continue a conversation
+
+Send the `session_id` from a previous response to continue the conversation with history:
+
+```bash
+curl -X POST http://localhost:8000/api/chat/ \
+  -H "Content-Type: application/json" \
+  -d '{"question": "What denominations is that divided into?", "session_id": "a1b2c3d4-..."}'
+```
+
+The AI model receives the prior conversation history so it can understand follow-up questions in context. Omit `session_id` (or send `null`) to start a fresh conversation.
+
 ## API Reference
 
 | Method | Endpoint | Description |
@@ -190,7 +204,7 @@ The answer is generated using only the content from your uploaded documents. Cit
 | `POST` | `/api/documents/` | Upload a PDF document |
 | `GET` | `/api/documents/` | List all documents |
 | `GET` | `/api/documents/{id}/` | Get document details and status |
-| `POST` | `/api/chat/` | Ask a question about your documents |
+| `POST` | `/api/chat/` | Ask a question (supports conversation history via `session_id`) |
 
 ### Error responses
 
@@ -257,6 +271,8 @@ projectlens/
 **The Celery worker must be running.** Without it, uploaded documents will stay in `PENDING` status forever. Make sure to start it in a separate terminal before uploading.
 
 **All answers are grounded in your documents.** The AI model is instructed to answer only from the provided context. If the answer isn't in your documents, it will say so rather than making something up. Citations always come from the retrieval metadata, never invented by the model.
+
+**Conversations have memory.** Each chat response includes a `session_id`. Send it back with your next question to continue the conversation — the AI model receives the prior exchange history so it can handle follow-up questions. Omit `session_id` to start fresh. History is capped at the last 10 messages (configurable via `CHAT_HISTORY_LIMIT`).
 
 **Only PDF files are supported.** The upload endpoint rejects non-PDF files, empty files, corrupt PDFs, and files larger than the configured maximum size (50 MB by default).
 

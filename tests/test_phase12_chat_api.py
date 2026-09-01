@@ -130,7 +130,9 @@ class TestChatEndpoint:
                 {"question": "How much money?"},
                 format="json",
             )
-            mock_cls.return_value.ask.assert_called_once_with("How much money?")
+            mock_cls.return_value.ask.assert_called_once_with(
+                "How much money?", history=[]
+            )
 
 
 @pytest.mark.django_db
@@ -166,7 +168,7 @@ class TestChatEndpointConsistency:
             )
         assert response["Content-Type"] == "application/json"
 
-    def test_response_keys_only_answer_and_citations(self, api_client):
+    def test_response_keys(self, api_client):
         with patch("apps.chat.views.RAGService") as mock_cls:
             mock_cls.return_value.ask.return_value = _make_rag_result()
             response = api_client.post(
@@ -174,7 +176,7 @@ class TestChatEndpointConsistency:
                 {"question": "question"},
                 format="json",
             )
-        assert set(response.data.keys()) == {"answer", "citations"}
+        assert set(response.data.keys()) == {"session_id", "answer", "citations"}
 
     def test_citation_keys_only_source_and_page(self, api_client):
         with patch("apps.chat.views.RAGService") as mock_cls:

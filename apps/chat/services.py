@@ -47,10 +47,14 @@ class RAGService:
         self.retrieval_service = retrieval_service or RetrievalService()
         self.ai_provider = ai_provider or get_generation_provider()
 
-    def ask(self, question: str) -> RAGResult:
+    def ask(
+        self,
+        question: str,
+        history: list[dict] | None = None,
+    ) -> RAGResult:
         results = self.retrieval_service.search(question)
         context = self._build_context(results)
-        prompt = self._build_prompt(context, question)
+        prompt = self._build_prompt(context, question, history)
         answer = self.ai_provider.generate(prompt)
         citations = build_citations(results)
         return RAGResult(answer=answer, citations=citations, retrieval_results=results)
@@ -65,5 +69,22 @@ class RAGService:
             )
         return "\n\n".join(blocks)
 
-    def _build_prompt(self, context: str, question: str) -> str:
-        return f"{SYSTEM_PROMPT}\n\nContext:\n{context}\n\nQuestion:\n{question}"
+    def _build_history_block(self, history: list[dict]) -> str:
+        lines = []
+        for msg in history:
+            role = msg["role"].capitalize()
+            lines.append(f"{role}: {msg['content']}")
+        return "\n".join(lines)
+
+    def _build_prompt(
+        self,
+        context: str,
+        question: str,
+        history: list[dict] | None = None,
+    ) -> str:
+        parts = [SYSTEM_PROMPT]
+        if history:
+            parts.append(f"Conversation history:\n{self._build_history_block(history)}")
+        parts.append(f"Context:\n{context}")
+        parts.append(f"Question:\n{question}")
+        return "\n\n".join(parts)
