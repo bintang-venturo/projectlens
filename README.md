@@ -1,8 +1,8 @@
 # ProjectLens
 
-A Django-based RAG (Retrieval-Augmented Generation) application that lets you upload PDF documents, index their contents into a vector database, and ask natural-language questions that are answered with source citations.
+A Django-based RAG (Retrieval-Augmented Generation) application with a web UI. Upload PDF documents, index their contents into a vector database, and ask natural-language questions answered with source citations.
 
-Upload a PDF. Ask a question. Get an answer grounded in your documents, with the exact source file and page number.
+Upload a PDF. Ask a question. Get an answer grounded in your documents, with the exact source file and page number — all from the browser or the REST API.
 
 ## How It Works
 
@@ -18,9 +18,9 @@ Question → Embed Query → Search ChromaDB → Top-K Chunks ┘
                                     Answer + Source Citations
 ```
 
-1. You upload a PDF via the REST API.
+1. You upload a PDF via the web UI or the REST API.
 2. A Celery worker asynchronously parses the PDF page by page, splits the text into chunks, generates vector embeddings, and stores them in ChromaDB.
-3. You ask a question via the chat API.
+3. You ask a question via the chat page or the chat API.
 4. The system embeds your question, retrieves the most relevant chunks from ChromaDB, feeds them as context to an AI model, and returns an answer with citations pointing back to the source document and page.
 
 ## Prerequisites
@@ -118,9 +118,23 @@ uv run celery -A config worker --loglevel=info
 uv run python manage.py runserver
 ```
 
-The API is now available at `http://localhost:8000`.
+The application is now available at `http://localhost:8000`.
 
-## Usage
+## Web UI
+
+Open `http://localhost:8000` in your browser. The UI has three pages:
+
+| Page | URL | Description |
+|------|-----|-------------|
+| Chat | `/` | Ask questions about your documents. Answers include source citations. Supports multi-turn conversations with session history. |
+| Document Library | `/documents/` | Upload PDFs via drag-and-drop or file picker. View all documents with their processing status. Status auto-refreshes every 5 seconds while documents are being processed. |
+| Settings | `/settings/` | Placeholder page (not wired to backend). |
+
+The frontend uses Django templates with htmx for dynamic updates and Alpine.js for client-side interactivity. No build step required.
+
+## REST API
+
+The same functionality is also available via the REST API for programmatic access.
 
 ### Upload a PDF
 
@@ -197,7 +211,7 @@ curl -X POST http://localhost:8000/api/chat/ \
 
 The AI model receives the prior conversation history so it can understand follow-up questions in context. Omit `session_id` (or send `null`) to start a fresh conversation.
 
-## API Reference
+### API Reference
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
@@ -224,6 +238,28 @@ Common status codes:
 | 201 | Document created |
 | 400 | Validation error (bad input, non-PDF, empty file) |
 | 404 | Document not found |
+
+## Resetting Data
+
+To clear all application data (documents, chat sessions, messages) but keep the schema:
+
+```bash
+uv run python manage.py flush --no-input
+```
+
+To also clear the vector store, restart the ChromaDB container:
+
+```bash
+docker compose restart chromadb
+```
+
+To nuke everything and start completely fresh (removes all Docker volumes):
+
+```bash
+docker compose down -v
+docker compose up -d
+uv run python manage.py migrate
+```
 
 ## Running Tests
 
@@ -255,9 +291,15 @@ projectlens/
 │   ├── ingestion/       # PDF parsing, chunking, Celery tasks
 │   ├── retrieval/       # Query embedding, vector search
 │   ├── chat/            # Chat API, RAG service, citations
-│   └── ai/              # AI provider abstractions (embedding + generation)
+│   ├── ai/              # AI provider abstractions (embedding + generation)
+│   └── ui/              # Web UI — templates, views, static assets
+│       ├── templates/ui/    # Django templates (base, chat, documents, settings)
+│       ├── static/ui/       # Static files (logo, images)
+│       ├── views.py         # Page views + htmx partials
+│       └── urls.py          # UI URL routing
 ├── core/                # Shared services (ChromaDB client)
-├── tests/               # All test files
+├── design/              # UI design references (Stitch mockups)
+├── tests/               # All test files (366 tests)
 ├── data/                # Uploaded files (created at runtime)
 ├── docker-compose.yml   # PostgreSQL, Redis, ChromaDB
 ├── pyproject.toml       # Dependencies and project config
@@ -266,13 +308,13 @@ projectlens/
 
 ## Things to Know
 
-**Document processing is asynchronous.** When you upload a PDF, the API returns immediately with status `PENDING`. The Celery worker handles parsing, chunking, embedding, and vector storage in the background. You must wait for the status to reach `COMPLETED` before the document's content is searchable.
+**Document processing is asynchronous.** When you upload a PDF (via the web UI or the API), the status starts as `PENDING`. The Celery worker handles parsing, chunking, embedding, and vector storage in the background. The Document Library page auto-refreshes status every 5 seconds while documents are being processed.
 
 **The Celery worker must be running.** Without it, uploaded documents will stay in `PENDING` status forever. Make sure to start it in a separate terminal before uploading.
 
 **All answers are grounded in your documents.** The AI model is instructed to answer only from the provided context. If the answer isn't in your documents, it will say so rather than making something up. Citations always come from the retrieval metadata, never invented by the model.
 
-**Conversations have memory.** Each chat response includes a `session_id`. Send it back with your next question to continue the conversation — the AI model receives the prior exchange history so it can handle follow-up questions. Omit `session_id` to start fresh. History is capped at the last 10 messages (configurable via `CHAT_HISTORY_LIMIT`).
+**Conversations have memory.** In the web UI, multi-turn conversations work automatically — the session is maintained client-side. Via the API, send the `session_id` from a previous response to continue the conversation. Omit `session_id` to start fresh. History is capped at the last 10 messages (configurable via `CHAT_HISTORY_LIMIT`). The chat page also includes a sidebar for switching between conversations during the browser session.
 
 **Only PDF files are supported.** The upload endpoint rejects non-PDF files, empty files, corrupt PDFs, and files larger than the configured maximum size (50 MB by default).
 
@@ -285,3 +327,5 @@ projectlens/
 **The `.env` file contains secrets.** Never commit it to version control. Add `.env` to your `.gitignore`.
 
 **AI provider is swappable.** The system uses abstractions for both embedding and generation. The current implementation uses Google Gemini, but providers can be replaced by implementing the `EmbeddingProvider` and `AIProvider` interfaces in `apps/ai/providers/`.
+
+**The web UI has no build step.** The frontend uses Tailwind CSS via play-CDN, htmx, and Alpine.js — all loaded from CDN. No Node.js, npm, or bundler required. This is suitable for development and MVP use; a production deployment should switch to a compiled Tailwind build.
