@@ -2,6 +2,7 @@ import uuid
 from io import BytesIO
 from unittest.mock import patch
 
+import fitz
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -241,10 +242,15 @@ class TestProcessDocumentTask:
     def test_task_sets_processing_then_completed(self):
         from apps.ingestion.tasks import process_document
 
+        pdf_doc = fitz.open()
+        pdf_doc.new_page()
+        pdf_bytes = pdf_doc.tobytes()
+        pdf_doc.close()
+
         doc = Document.objects.create(
             name="test.pdf",
-            file=SimpleUploadedFile("test.pdf", _pdf_bytes()),
-            file_size=100,
+            file=SimpleUploadedFile("test.pdf", pdf_bytes, content_type="application/pdf"),
+            file_size=len(pdf_bytes),
         )
         assert doc.status == Document.Status.PENDING
 

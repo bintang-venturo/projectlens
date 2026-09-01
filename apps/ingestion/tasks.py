@@ -19,7 +19,10 @@ def process_document(self, document_id: str) -> None:
     doc.save(update_fields=["status", "updated_at"])
 
     try:
-        # Phase 05+ will add: parse PDF, save pages, chunk, embed, store vectors
+        from apps.ingestion.services import ingest_document
+
+        ingest_document(doc)
+        # Phase 06+ will add: chunk, embed, store vectors
         doc.status = Document.Status.COMPLETED
         doc.save(update_fields=["status", "updated_at"])
     except Exception as exc:
