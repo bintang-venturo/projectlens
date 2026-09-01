@@ -45,6 +45,18 @@ class ChromaService:
             metadatas=metadatas,
         )
 
+    def query(
+        self,
+        query_embedding: list[float],
+        n_results: int = 5,
+    ) -> dict:
+        collection = self.get_collection()
+        return collection.query(
+            query_embeddings=[query_embedding],
+            n_results=n_results,
+            include=["documents", "metadatas", "distances"],
+        )
+
     def delete_by_document(self, document_id: str) -> None:
         collection = self.get_collection()
         collection.delete(where={"document_id": document_id})
