@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "apps.retrieval",
     "apps.chat",
     "apps.ai",
+    "apps.ui",
 ]
 
 MIDDLEWARE = [
