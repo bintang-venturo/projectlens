@@ -1,7 +1,10 @@
+from apps.ai.embedding import EmbeddingService
+from apps.ai.providers.base import EmbeddingProvider
 from apps.documents.models import Document, DocumentPage
 from apps.ingestion.chunkers import Chunk, chunk_pages
 from apps.ingestion.models import DocumentChunk
 from apps.ingestion.parsers import ParsedPage, PDFParser
+from core.chroma import ChromaService
 
 
 def get_parser():
@@ -43,9 +46,55 @@ def save_chunks(document: Document, chunks: list[Chunk]) -> None:
     DocumentChunk.objects.bulk_create(chunk_objects)
 
 
-def ingest_document(document: Document) -> None:
+def embed_and_store_chunks(
+    document: Document,
+    chunks: list[Chunk],
+    embedding_service: EmbeddingService | None = None,
+    chroma_service: ChromaService | None = None,
+) -> None:
+    if not chunks:
+        return
+
+    embedding_service = embedding_service or EmbeddingService()
+    chroma_service = chroma_service or ChromaService()
+
+    chunk_ids = [c.chunk_id for c in chunks]
+    existing_ids = chroma_service.get_existing_ids(chunk_ids)
+    new_chunks = [c for c in chunks if c.chunk_id not in existing_ids]
+
+    if not new_chunks:
+        return
+
+    texts = [c.content for c in new_chunks]
+    embeddings = embedding_service.embed_documents(texts)
+
+    new_ids = [c.chunk_id for c in new_chunks]
+    metadatas = [
+        {
+            "document_id": str(document.pk),
+            "source": c.source,
+            "page": c.page_number,
+            "chunk_index": c.chunk_index,
+        }
+        for c in new_chunks
+    ]
+
+    chroma_service.upsert(
+        ids=new_ids,
+        embeddings=embeddings,
+        documents=texts,
+        metadatas=metadatas,
+    )
+
+
+def ingest_document(
+    document: Document,
+    embedding_service: EmbeddingService | None = None,
+    chroma_service: ChromaService | None = None,
+) -> None:
     parser = get_parser()
     parsed_pages = parser.parse(document.file.path)
     save_parsed_pages(document, parsed_pages)
     chunks = chunk_pages(parsed_pages)
     save_chunks(document, chunks)
+    embed_and_store_chunks(document, chunks, embedding_service, chroma_service)

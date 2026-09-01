@@ -22,7 +22,7 @@ def process_document(self, document_id: str) -> None:
         from apps.ingestion.services import ingest_document
 
         ingest_document(doc)
-        # Phase 07+ will add: embed, store vectors
+        # Phase 09+ will add: retrieval, RAG, chat
         doc.status = Document.Status.COMPLETED
         doc.save(update_fields=["status", "updated_at"])
     except Exception as exc:

@@ -31,6 +31,7 @@ packages = ["config", "apps", "core"]
 DJANGO_SETTINGS_MODULE = "config.settings"
 pythonpath = ["."]
 testpaths = ["tests"]
+markers = ["no_embed_mock: disable auto-mock of embed_and_store_chunks"]
 
 [dependency-groups]
 dev = [
