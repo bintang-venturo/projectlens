@@ -8,7 +8,7 @@ class GeminiProvider(AIProvider):
 
     def __init__(self):
         self.client = genai.Client(api_key=settings.EMBEDDING_API_KEY)
-        self.model = getattr(settings, "GEMINI_MODEL", "gemini-2.5-flash")
+        self.model = settings.GEMINI_MODEL
 
     def generate(self, prompt: str) -> str:
         response = self.client.models.generate_content(

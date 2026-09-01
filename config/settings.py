@@ -118,6 +118,11 @@ EMBEDDING_PROVIDER = os.getenv("EMBEDDING_PROVIDER", "gemini")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "text-embedding-004")
 EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
 
+# Generation
+
+GENERATION_PROVIDER = os.getenv("GENERATION_PROVIDER", "gemini")
+GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
 # Retrieval
 
 RETRIEVAL_K = int(os.getenv("RETRIEVAL_K", "5"))
