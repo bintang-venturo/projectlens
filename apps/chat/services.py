@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from apps.ai.generation import get_generation_provider
 from apps.ai.providers.base import AIProvider
@@ -14,9 +14,27 @@ SYSTEM_PROMPT = (
 
 
 @dataclass
+class Citation:
+    source: str
+    page: int
+
+
+@dataclass
 class RAGResult:
     answer: str
-    retrieval_results: list[RetrievalResult]
+    citations: list[Citation] = field(default_factory=list)
+    retrieval_results: list[RetrievalResult] = field(default_factory=list)
+
+
+def build_citations(results: list[RetrievalResult]) -> list[Citation]:
+    seen: set[tuple[str, int]] = set()
+    citations: list[Citation] = []
+    for r in results:
+        key = (r.source, r.page)
+        if key not in seen:
+            seen.add(key)
+            citations.append(Citation(source=r.source, page=r.page))
+    return citations
 
 
 class RAGService:
@@ -34,7 +52,8 @@ class RAGService:
         context = self._build_context(results)
         prompt = self._build_prompt(context, question)
         answer = self.ai_provider.generate(prompt)
-        return RAGResult(answer=answer, retrieval_results=results)
+        citations = build_citations(results)
+        return RAGResult(answer=answer, citations=citations, retrieval_results=results)
 
     def _build_context(self, results: list[RetrievalResult]) -> str:
         if not results:
