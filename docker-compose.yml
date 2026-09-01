@@ -2,7 +2,7 @@ services:
 
   postgres:
     image: postgres:16
-    container_name: pdf-rag-postgres
+    container_name: projectlens-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: pdf_rag
@@ -20,7 +20,7 @@ services:
 
   redis:
     image: redis:7
-    container_name: pdf-rag-redis
+    container_name: projectlens-redis
     restart: unless-stopped
     ports:
       - "6379:6379"
@@ -29,7 +29,7 @@ services:
 
   chromadb:
     image: chromadb/chroma:latest
-    container_name: pdf-rag-chromadb
+    container_name: projectlens-chromadb
     restart: unless-stopped
     ports:
       - "8000:8000"
