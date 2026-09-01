@@ -2,8 +2,64 @@
 
 {% block title %}Document Library — ProjectLens{% endblock %}
 
+{% block extra_head %}
+<style>[x-cloak] { display: none !important; }</style>
+{% endblock %}
+
 {% block content %}
-<div class="p-6 lg:p-8">
+<div class="p-6 lg:p-8"
+     x-data="{
+       dragging: false,
+       uploading: false,
+       uploadError: '',
+       uploadSuccess: '',
+       csrfToken: '{{ csrf_token }}',
+
+       selectFile() {
+         this.$refs.fileInput.click();
+       },
+
+       handleFiles(files) {
+         if (files.length === 0) return;
+         this.upload(files[0]);
+       },
+
+       async upload(file) {
+         this.uploading = true;
+         this.uploadError = '';
+         this.uploadSuccess = '';
+         const formData = new FormData();
+         formData.append('file', file);
+         try {
+           const resp = await fetch('/api/documents/', {
+             method: 'POST',
+             headers: { 'X-CSRFToken': this.csrfToken },
+             body: formData,
+           });
+           if (!resp.ok) {
+             const data = await resp.json();
+             if (data.file) {
+               this.uploadError = Array.isArray(data.file) ? data.file[0] : data.file;
+             } else {
+               this.uploadError = 'Upload failed. Please try again.';
+             }
+           } else {
+             this.uploadSuccess = file.name + ' uploaded successfully.';
+             htmx.trigger('#document-table-body', 'refresh');
+           }
+         } catch (e) {
+           this.uploadError = 'Network error. Please try again.';
+         } finally {
+           this.uploading = false;
+           this.$refs.fileInput.value = '';
+         }
+       }
+     }">
+
+  <!-- Hidden file input -->
+  <input type="file" x-ref="fileInput" accept=".pdf,application/pdf"
+         @change="handleFiles($event.target.files)" class="hidden">
+
   <!-- Page Header -->
   <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-6">
     <div>
@@ -19,17 +75,25 @@
                class="pl-10 pr-4 py-2 bg-white border border-gray-200 rounded-lg text-sm text-gray-700 placeholder-gray-400 focus:outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500"
                disabled>
       </div>
-      <button class="flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors" disabled>
+      <button @click="selectFile()"
+              :disabled="uploading"
+              class="flex items-center gap-2 px-4 py-2 bg-navy text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
         <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/>
         </svg>
-        Upload File
+        <span x-text="uploading ? 'Uploading...' : 'Upload File'">Upload File</span>
       </button>
     </div>
   </div>
 
   <!-- Upload Drop Zone -->
-  <div class="border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 p-10 text-center mb-6">
+  <div class="border-2 border-dashed rounded-xl p-10 text-center mb-6 transition-colors cursor-pointer"
+       :class="dragging ? 'border-brand-500 bg-brand-50' : 'border-gray-300 bg-gray-50'"
+       @click="selectFile()"
+       @dragover.prevent="dragging = true"
+       @dragenter.prevent="dragging = true"
+       @dragleave.prevent="dragging = false"
+       @drop.prevent="dragging = false; handleFiles($event.dataTransfer.files)">
     <div class="flex flex-col items-center">
       <div class="w-12 h-12 rounded-lg bg-white border border-gray-200 flex items-center justify-center mb-3">
         <svg class="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -37,7 +101,7 @@
                 d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
         </svg>
       </div>
-      <p class="text-sm font-medium text-gray-700 mb-1">Drag and drop documents here</p>
+      <p class="text-sm font-medium text-gray-700 mb-1" x-text="uploading ? 'Uploading file...' : 'Drag and drop documents here'">Drag and drop documents here</p>
       <p class="text-xs text-gray-400 mb-3">or click to browse from your computer</p>
       <div class="flex items-center gap-3 text-xs text-gray-400">
         <span class="flex items-center gap-1">
@@ -47,6 +111,26 @@
       </div>
       <p class="text-xs text-gray-400 mt-2">Maximum file size: 50MB</p>
     </div>
+  </div>
+
+  <!-- Upload Error -->
+  <div x-show="uploadError" x-cloak
+       class="mb-4 flex items-center gap-2 px-4 py-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <span x-text="uploadError"></span>
+    <button @click="uploadError = ''" class="ml-auto text-red-400 hover:text-red-600">&times;</button>
+  </div>
+
+  <!-- Upload Success -->
+  <div x-show="uploadSuccess" x-cloak
+       class="mb-4 flex items-center gap-2 px-4 py-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg">
+    <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <span x-text="uploadSuccess"></span>
+    <button @click="uploadSuccess = ''" class="ml-auto text-green-400 hover:text-green-600">&times;</button>
   </div>
 
   <!-- Document Table -->
@@ -60,10 +144,13 @@
           <th class="text-left px-6 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date Added</th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-100">
+      <tbody id="document-table-body"
+             hx-get="{% url 'ui:document-rows' %}"
+             hx-trigger="load, refresh"
+             hx-swap="outerHTML">
         <tr>
           <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-400">
-            No documents uploaded yet. Upload a PDF to get started.
+            Loading documents...
           </td>
         </tr>
       </tbody>

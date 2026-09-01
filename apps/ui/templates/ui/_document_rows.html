@@ -1,0 +1,98 @@
+{% if has_active %}
+<tbody id="document-table-body"
+       class="divide-y divide-gray-100"
+       hx-get="{% url 'ui:document-rows' %}"
+       hx-trigger="every 5s"
+       hx-swap="outerHTML">
+{% else %}
+<tbody id="document-table-body"
+       class="divide-y divide-gray-100">
+{% endif %}
+
+  {% if documents %}
+    {% for doc in documents %}
+    <tr class="hover:bg-gray-50 transition-colors">
+      <!-- Document Name -->
+      <td class="px-6 py-4">
+        <div class="flex items-center gap-3">
+          <div class="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0
+                      {% if doc.status == 'FAILED' %}bg-red-50{% else %}bg-gray-100{% endif %}">
+            {% if doc.status == 'FAILED' %}
+            <svg class="w-5 h-5 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+            {% elif doc.status == 'PROCESSING' %}
+            <svg class="w-5 h-5 text-yellow-500 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+            </svg>
+            {% else %}
+            <svg class="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.75"
+                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            {% endif %}
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-gray-900 truncate">{{ doc.name }}</p>
+            <p class="text-xs {% if doc.status == 'FAILED' %}text-red-500{% else %}text-gray-400{% endif %} truncate">
+              {% if doc.status == 'COMPLETED' %}
+                {{ doc.page_count }} page{{ doc.page_count|pluralize }} &middot; Embedded
+              {% elif doc.status == 'PENDING' %}
+                In Queue
+              {% elif doc.status == 'PROCESSING' %}
+                Processing&hellip;
+              {% elif doc.status == 'FAILED' %}
+                {{ doc.error_message|default:"Processing failed" }}
+              {% endif %}
+            </p>
+          </div>
+        </div>
+      </td>
+
+      <!-- Size -->
+      <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+        {{ doc.file_size|filesizeformat }}
+      </td>
+
+      <!-- Status -->
+      <td class="px-6 py-4 whitespace-nowrap">
+        {% if doc.status == 'COMPLETED' %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+          COMPLETED
+        </span>
+        {% elif doc.status == 'PENDING' %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-orange-50 text-orange-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-orange-500"></span>
+          PENDING
+        </span>
+        {% elif doc.status == 'PROCESSING' %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+          PROCESSING
+        </span>
+        {% elif doc.status == 'FAILED' %}
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-50 text-red-700">
+          <span class="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+          FAILED
+        </span>
+        {% endif %}
+      </td>
+
+      <!-- Date Added -->
+      <td class="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+        {{ doc.created_at|date:"M d, Y" }}
+      </td>
+    </tr>
+    {% endfor %}
+  {% else %}
+    <tr>
+      <td colspan="4" class="px-6 py-12 text-center text-sm text-gray-400">
+        No documents uploaded yet. Upload a PDF to get started.
+      </td>
+    </tr>
+  {% endif %}
+
+</tbody>
