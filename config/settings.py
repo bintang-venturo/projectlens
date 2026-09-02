@@ -26,6 +26,7 @@ INSTALLED_APPS = [
     "apps.retrieval",
     "apps.chat",
     "apps.ai",
+    "apps.intelligence",
     "apps.ui",
 ]
 
@@ -125,6 +126,12 @@ GENERATION_PROVIDER = os.getenv("GENERATION_PROVIDER", "gemini")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024"))
 GEMINI_TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.3"))
+
+# Extraction (Project Intelligence)
+
+EXTRACTION_MAX_OUTPUT_TOKENS = int(os.getenv("EXTRACTION_MAX_OUTPUT_TOKENS", "16384"))
+EXTRACTION_TEMPERATURE = float(os.getenv("EXTRACTION_TEMPERATURE", "0.1"))
+EXTRACTION_MAX_CONTENT_LENGTH = int(os.getenv("EXTRACTION_MAX_CONTENT_LENGTH", "800000"))
 
 # Retrieval
 

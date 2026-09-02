@@ -7,18 +7,31 @@ from .base import AIProvider, EmbeddingProvider
 
 class GeminiProvider(AIProvider):
 
-    def __init__(self):
+    def __init__(
+        self,
+        max_output_tokens=None,
+        temperature=None,
+        response_mime_type=None,
+    ):
         self.client = genai.Client(api_key=settings.EMBEDDING_API_KEY)
         self.model = settings.GEMINI_MODEL
+        self.max_output_tokens = max_output_tokens or settings.GEMINI_MAX_OUTPUT_TOKENS
+        self.temperature = (
+            temperature if temperature is not None else settings.GEMINI_TEMPERATURE
+        )
+        self.response_mime_type = response_mime_type
 
     def generate(self, prompt: str) -> str:
+        config = types.GenerateContentConfig(
+            max_output_tokens=self.max_output_tokens,
+            temperature=self.temperature,
+        )
+        if self.response_mime_type:
+            config.response_mime_type = self.response_mime_type
         response = self.client.models.generate_content(
             model=self.model,
             contents=prompt,
-            config=types.GenerateContentConfig(
-                max_output_tokens=settings.GEMINI_MAX_OUTPUT_TOKENS,
-                temperature=settings.GEMINI_TEMPERATURE,
-            ),
+            config=config,
         )
         return response.text
 

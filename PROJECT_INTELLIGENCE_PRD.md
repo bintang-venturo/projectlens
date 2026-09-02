@@ -10,6 +10,10 @@ Lanjutan dari backend RAG (Phase 01–13) dan UI (Phase 14–17). Fitur ini mena
 - **Storage: relasional (PostgreSQL)**, bukan graph DB terpisah (Neo4j dll) — cukup model dengan FK/self-referencing untuk dependency graph. Menghindari komponen infrastruktur baru yang tidak perlu.
 - **Extraction: LLM dengan structured output** (JSON schema / function calling, provider Gemini yang sudah dipakai) — bukan prompt bebas yang di-parse manual dengan regex.
 
+## Ekspektasi & Batasan yang Perlu Disadari
+
+Ekstraksi ini **probabilistik, bukan deterministik** — hasilnya bergantung pada seberapa eksplisit struktur dokumen input (heading per fitur, requirement dengan bahasa eksplisit seperti "shall"/"must" lebih mudah dikenali daripada prosa naratif bebas). Menjalankan "Re-analyze Project" dua kali pada dokumen yang sama berpotensi menghasilkan granularitas Feature yang sedikit berbeda (kadang tergabung, kadang terpecah) — ini bukan bug, melainkan karakteristik dasar pendekatan LLM-based extraction. Field source reference (lihat Phase 18) adalah mitigasi utama untuk masalah ini: kalau hasilnya kurang sesuai ekspektasi, user bisa telusuri sumber kalimat/dokumennya dan itu jadi dasar untuk revisi prompt ekstraksi di Phase 19, bukan sekadar menerima hasilnya mentah-mentah.
+
 ## Urutan Fase
 
 ### Phase 18 — Data Model (Structured Project Understanding)
@@ -17,13 +21,17 @@ Model baru untuk merepresentasikan pemahaman terstruktur:
 - `ProjectAnalysis` — status (PENDING/PROCESSING/COMPLETED/FAILED), triggered_at, completed_at (satu "snapshot" analisis)
 - `Feature` — nama, deskripsi, source document reference(s)
 - `Requirement` — terikat ke Feature, status (covered/missing), source reference
-- `UserFlow` + `UserFlowStep` — terikat ke Feature, urutan langkah, actor
-- `Dependency` — relasi Feature-to-Feature (self-referencing, dengan tipe/arah)
-- `Conflict` — dua Requirement yang bertentangan, referensi ke keduanya, deskripsi konflik
-- `Risk` — terikat ke Feature/Requirement, severity, deskripsi
+- `UserFlow` + `UserFlowStep` — terikat ke Feature, urutan langkah, actor, source reference
+- `Dependency` — relasi Feature-to-Feature (self-referencing, dengan tipe/arah), source reference, dan field `inference_type` (EXPLICIT/INFERRED — lihat catatan di bawah)
+- `Conflict` — dua Requirement yang bertentangan, referensi ke keduanya, deskripsi konflik, source reference
+- `Risk` — terikat ke Feature/Requirement, severity, deskripsi, source reference
+
+**Semua entitas di atas wajib punya field source reference** (dokumen + bagian/kutipan mana yang jadi dasar ekstraksi) — bukan cuma Feature/Requirement. Ini untuk traceability: kalau hasil ekstraksi meleset, user bisa telusuri kenapa. Menambahkan field ini belakangan (setelah Phase 19 jalan) akan butuh migration ulang + re-analisa data lama, jadi harus sudah ada dari skema awal.
+
+**Kenapa `Dependency` butuh `inference_type`:** dependency bisa berasal dari pernyataan eksplisit di dokumen ("Fitur checkout membutuhkan fitur cart"), atau disimpulkan LLM dari konteks (urutan user flow, referensi silang). Yang inferred secara inheren lebih rentan salah — field ini memungkinkan UI nanti (Phase 21) menampilkan bedanya (misal edge solid vs dashed di graph), bukan menyamaratakan semua dependency sebagai sama-sama pasti.
 
 **Definition of Done:**
-- Semua model + migration ada
+- Semua model + migration ada, termasuk field source reference di semua entitas
 - Terdaftar di Django admin untuk keperluan inspeksi manual selama development
 - Belum ada logic ekstraksi — fase ini murni skema (pola sama seperti ChatSession/ChatMessage di Phase 03 dulu)
 
@@ -37,6 +45,7 @@ Endpoint `POST /api/project/analyze/` yang trigger Celery task async. Task ini:
 **Keputusan yang perlu di-propose Claude:**
 - Berapa banyak dokumen/konten yang bisa masuk satu LLM call (context window limit) — apakah perlu multi-pass/batching untuk project dengan banyak dokumen
 - Bagaimana menangani project besar yang melebihi context window (chunking strategy untuk ekstraksi, beda dengan chunking untuk embedding)
+- **Entity resolution lintas-dokumen**: kalau dokumen berbeda pakai istilah berbeda untuk Feature yang sama (misal PRD sebut "Document Upload", Discussion notes sebut "File Ingestion"), bagaimana ini disatukan? Dua pendekatan yang bisa dipertimbangkan: (a) single-pass — semua dokumen masuk satu context LLM sekaligus supaya LLM menyatukan sendiri saat ekstraksi (lebih akurat, tapi terbatas context window), atau (b) multi-pass — ekstrak per dokumen dulu, lalu pass tambahan khusus untuk merge Feature yang mirip. Claude perlu propose salah satu berdasarkan estimasi ukuran dokumen project ini.
 
 **Definition of Done:**
 - Trigger manual dari API berjalan, task async tidak blocking
