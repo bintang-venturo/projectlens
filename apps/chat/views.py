@@ -8,6 +8,37 @@ from apps.chat.serializers import ChatRequestSerializer, ChatResponseSerializer
 from apps.chat.services import RAGService
 
 
+class SessionListView(APIView):
+
+    def get(self, request):
+        sessions = ChatSession.objects.prefetch_related("messages").all()
+        result = []
+        for session in sessions:
+            msgs = session.messages.all()
+            if not msgs.exists():
+                continue
+            first_user_msg = next(
+                (m for m in msgs if m.role == ChatMessage.Role.USER), None
+            )
+            title = "New Conversation"
+            if first_user_msg:
+                content = first_user_msg.content
+                title = (content[:40] + "...") if len(content) > 40 else content
+            result.append({
+                "session_id": str(session.id),
+                "title": title,
+                "messages": [
+                    {
+                        "role": m.role.lower(),
+                        "content": m.content,
+                        "citations": [],
+                    }
+                    for m in msgs
+                ],
+            })
+        return Response(result)
+
+
 class ChatView(APIView):
 
     def post(self, request):

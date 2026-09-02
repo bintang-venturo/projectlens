@@ -129,6 +129,20 @@
          const el = this.$refs.messagesContainer;
          if (el) el.scrollTop = el.scrollHeight;
        },
+
+       async init() {
+         try {
+           const resp = await fetch('/api/chat/sessions/');
+           if (resp.ok) {
+             const data = await resp.json();
+             this.sessions = data.map(s => ({
+               sessionId: s.session_id,
+               title: s.title,
+               messages: s.messages,
+             }));
+           }
+         } catch (e) {}
+       },
      }">
 
   <!-- Chat History Sidebar -->
