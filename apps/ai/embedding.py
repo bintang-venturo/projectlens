@@ -3,13 +3,19 @@ from django.conf import settings
 from apps.ai.providers.base import EmbeddingProvider
 
 
+_embedding_cache: dict[str, EmbeddingProvider] = {}
+
+
 def get_embedding_provider() -> EmbeddingProvider:
     provider_name = settings.EMBEDDING_PROVIDER
-    if provider_name == "gemini":
-        from apps.ai.providers.gemini import GeminiEmbeddingProvider
+    if provider_name not in _embedding_cache:
+        if provider_name == "gemini":
+            from apps.ai.providers.gemini import GeminiEmbeddingProvider
 
-        return GeminiEmbeddingProvider()
-    raise ValueError(f"Unknown embedding provider: {provider_name}")
+            _embedding_cache[provider_name] = GeminiEmbeddingProvider()
+        else:
+            raise ValueError(f"Unknown embedding provider: {provider_name}")
+    return _embedding_cache[provider_name]
 
 
 class EmbeddingService:

@@ -1,5 +1,6 @@
 from django.conf import settings
 from google import genai
+from google.genai import types
 
 from .base import AIProvider, EmbeddingProvider
 
@@ -14,6 +15,10 @@ class GeminiProvider(AIProvider):
         response = self.client.models.generate_content(
             model=self.model,
             contents=prompt,
+            config=types.GenerateContentConfig(
+                max_output_tokens=settings.GEMINI_MAX_OUTPUT_TOKENS,
+                temperature=settings.GEMINI_TEMPERATURE,
+            ),
         )
         return response.text
 

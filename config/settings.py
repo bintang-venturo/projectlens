@@ -123,6 +123,8 @@ EMBEDDING_API_KEY = os.getenv("EMBEDDING_API_KEY", "")
 
 GENERATION_PROVIDER = os.getenv("GENERATION_PROVIDER", "gemini")
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024"))
+GEMINI_TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.3"))
 
 # Retrieval
 
