@@ -1,0 +1,570 @@
+{% extends "ui/base.html" %}
+
+{% block title %}Project Map — ProjectLens{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.30.4/cytoscape.min.js"></script>
+<style>
+  [x-cloak] { display: none !important; }
+
+  #cy {
+    width: 100%;
+    height: 100%;
+    min-height: 400px;
+  }
+
+  .detail-panel {
+    transition: transform 0.2s ease-in-out;
+  }
+
+  .severity-badge {
+    font-size: 0.7rem;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .severity-critical { background: #fef2f2; color: #991b1b; }
+  .severity-high { background: #fff7ed; color: #9a3412; }
+  .severity-medium { background: #fffbeb; color: #92400e; }
+  .severity-low { background: #f0fdf4; color: #166534; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex h-full" x-data="projectMap()" x-init="init()">
+
+  <!-- Main Graph Area -->
+  <div class="flex-1 flex flex-col min-w-0">
+
+    <!-- Toolbar -->
+    <div class="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-white">
+      <div>
+        <h1 class="text-xl font-semibold text-gray-900">Project Map</h1>
+        <p class="text-sm text-gray-500 mt-0.5" x-text="statusText"></p>
+      </div>
+      <div class="flex items-center gap-3">
+        <!-- Legend -->
+        <div class="hidden sm:flex items-center gap-4 mr-4 text-xs text-gray-500">
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-6 h-0.5 bg-gray-700"></span> Explicit
+          </span>
+          <span class="flex items-center gap-1.5">
+            <span class="inline-block w-6 h-0.5 border-t-2 border-dashed border-gray-400"></span> Inferred
+          </span>
+        </div>
+
+        <!-- Re-analyze Button -->
+        <button
+          @click="triggerAnalysis()"
+          :disabled="analyzing"
+          class="inline-flex items-center gap-2 px-4 py-2 bg-brand-600 text-white text-sm font-medium rounded-lg hover:bg-brand-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+          <svg x-show="!analyzing" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+          <svg x-show="analyzing" x-cloak class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <span x-text="analyzing ? 'Analyzing...' : 'Re-analyze Project'"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Graph Container -->
+    <div class="flex-1 relative bg-gray-50">
+      <!-- Empty State -->
+      <div x-show="!loading && features.length === 0" x-cloak
+           class="absolute inset-0 flex flex-col items-center justify-center text-gray-400">
+        <svg class="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/>
+        </svg>
+        <p class="text-lg font-medium mb-1">No project analysis yet</p>
+        <p class="text-sm">Click "Re-analyze Project" to extract features from your documents.</p>
+      </div>
+
+      <!-- Loading State -->
+      <div x-show="loading" x-cloak
+           class="absolute inset-0 flex items-center justify-center bg-gray-50">
+        <div class="flex flex-col items-center gap-3">
+          <svg class="w-8 h-8 animate-spin text-brand-500" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+          </svg>
+          <span class="text-sm text-gray-500">Loading analysis data...</span>
+        </div>
+      </div>
+
+      <!-- Cytoscape Graph -->
+      <div id="cy" x-show="!loading && features.length > 0"></div>
+    </div>
+  </div>
+
+  <!-- Detail Panel (right side) -->
+  <div x-show="selectedFeature" x-cloak
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="translate-x-full"
+       x-transition:enter-end="translate-x-0"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="translate-x-0"
+       x-transition:leave-end="translate-x-full"
+       class="detail-panel w-96 bg-white border-l border-gray-200 flex-shrink-0 overflow-y-auto scrollbar-thin">
+
+    <template x-if="selectedFeature">
+      <div class="p-6">
+        <!-- Header -->
+        <div class="flex items-start justify-between mb-4">
+          <h2 class="text-lg font-semibold text-gray-900 pr-2" x-text="selectedFeature.name"></h2>
+          <button @click="deselectFeature()" class="p-1 text-gray-400 hover:text-gray-600 rounded">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+
+        <!-- Description -->
+        <p class="text-sm text-gray-600 mb-6" x-text="selectedFeature.description || 'No description'"></p>
+
+        <!-- Requirements -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+            </svg>
+            Requirements
+            <span class="text-xs text-gray-400" x-text="'(' + (selectedFeature.requirements || []).length + ')'"></span>
+          </h3>
+          <template x-if="!selectedFeature.requirements || selectedFeature.requirements.length === 0">
+            <p class="text-xs text-gray-400 italic">No requirements extracted</p>
+          </template>
+          <div class="space-y-2">
+            <template x-for="req in (selectedFeature.requirements || [])" :key="req.id">
+              <div class="p-2.5 rounded-lg border text-sm"
+                   :class="req.status === 'COVERED' ? 'border-green-200 bg-green-50' : 'border-amber-200 bg-amber-50'">
+                <div class="flex items-start gap-2">
+                  <span class="mt-0.5 flex-shrink-0">
+                    <template x-if="req.status === 'COVERED'">
+                      <svg class="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                      </svg>
+                    </template>
+                    <template x-if="req.status === 'MISSING'">
+                      <svg class="w-4 h-4 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+                      </svg>
+                    </template>
+                  </span>
+                  <span class="text-gray-700" x-text="req.description"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Risks -->
+        <div class="mb-6">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+            </svg>
+            Risks
+            <span class="text-xs text-gray-400" x-text="'(' + (selectedFeature.risks || []).length + ')'"></span>
+          </h3>
+          <template x-if="!selectedFeature.risks || selectedFeature.risks.length === 0">
+            <p class="text-xs text-gray-400 italic">No risks identified</p>
+          </template>
+          <div class="space-y-2">
+            <template x-for="risk in (selectedFeature.risks || [])" :key="risk.id">
+              <div class="p-2.5 rounded-lg border border-gray-200 bg-white text-sm">
+                <div class="flex items-center gap-2 mb-1">
+                  <span class="severity-badge"
+                        :class="'severity-' + (risk.severity || 'medium').toLowerCase()"
+                        x-text="risk.severity"></span>
+                </div>
+                <p class="text-gray-700" x-text="risk.description"></p>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Source Documents -->
+        <div>
+          <h3 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            Source Documents
+          </h3>
+          <template x-if="!selectedFeature.source_references || selectedFeature.source_references.length === 0">
+            <p class="text-xs text-gray-400 italic">No source references</p>
+          </template>
+          <div class="space-y-2">
+            <template x-for="ref in (selectedFeature.source_references || [])" :key="ref.id">
+              <div class="p-2.5 rounded-lg border border-gray-200 bg-gray-50 text-sm">
+                <p class="font-medium text-gray-700" x-text="ref.document_name || 'Unknown document'"></p>
+                <p class="text-xs text-gray-500 mt-0.5" x-show="ref.page_number" x-text="'Page ' + ref.page_number"></p>
+                <p class="text-xs text-gray-500 mt-1 italic" x-show="ref.excerpt" x-text="'\"' + ref.excerpt + '\"'"></p>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Dependencies (outgoing) -->
+        <div class="mt-6" x-show="getFeatureDeps(selectedFeature.id).length > 0">
+          <h3 class="text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/>
+            </svg>
+            Dependencies
+          </h3>
+          <div class="space-y-1.5">
+            <template x-for="dep in getFeatureDeps(selectedFeature.id)" :key="dep.id">
+              <div class="flex items-center gap-2 p-2 rounded-lg border border-gray-200 bg-white text-sm cursor-pointer hover:bg-gray-50"
+                   @click="selectFeatureById(dep.targetId)">
+                <span class="text-xs px-1.5 py-0.5 rounded"
+                      :class="dep.inference_type === 'INFERRED' ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'"
+                      x-text="dep.inference_type === 'INFERRED' ? 'inferred' : 'explicit'"></span>
+                <span class="text-gray-700" x-text="dep.direction + ' ' + dep.targetName"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Error Toast -->
+  <div x-show="errorMessage" x-cloak
+       x-transition
+       class="fixed bottom-6 right-6 max-w-sm bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-lg shadow-lg text-sm">
+    <div class="flex items-start gap-2">
+      <svg class="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+      </svg>
+      <div>
+        <p x-text="errorMessage"></p>
+        <button @click="errorMessage = ''" class="text-xs text-red-500 hover:text-red-700 mt-1 underline">Dismiss</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+function projectMap() {
+  return {
+    cy: null,
+    features: [],
+    dependencies: [],
+    analysisData: null,
+    selectedFeature: null,
+    loading: true,
+    analyzing: false,
+    errorMessage: '',
+    statusText: 'Loading...',
+    pollTimeout: null,
+
+    async init() {
+      await this.loadAnalysis();
+    },
+
+    async loadAnalysis() {
+      this.loading = true;
+      try {
+        const response = await fetch('/api/project/analysis/latest/');
+        if (response.status === 404) {
+          this.features = [];
+          this.dependencies = [];
+          this.analysisData = null;
+          this.statusText = 'No analysis available';
+          this.loading = false;
+          return;
+        }
+        if (!response.ok) throw new Error('Failed to load analysis');
+
+        const data = await response.json();
+        this.analysisData = data;
+        this.features = data.features || [];
+        this.dependencies = data.dependencies || [];
+
+        if (data.status === 'PROCESSING' || data.status === 'PENDING') {
+          this.analyzing = true;
+          this.statusText = data.status === 'PENDING' ? 'Analysis pending...' : 'Analysis in progress...';
+          this.startPolling(data.id);
+          this.loading = false;
+          return;
+        }
+
+        if (data.status === 'FAILED') {
+          this.statusText = 'Last analysis failed: ' + (data.error_message || 'Unknown error');
+        } else {
+          const featureCount = this.features.length;
+          const depCount = this.dependencies.length;
+          this.statusText = featureCount + ' feature' + (featureCount !== 1 ? 's' : '') +
+                            ', ' + depCount + ' dependenc' + (depCount !== 1 ? 'ies' : 'y');
+        }
+
+        this.loading = false;
+        this.$nextTick(() => { this.renderGraph(); });
+      } catch (err) {
+        this.errorMessage = err.message || 'Failed to load analysis data';
+        this.loading = false;
+        this.statusText = 'Error loading data';
+      }
+    },
+
+    renderGraph() {
+      if (this.features.length === 0) return;
+
+      const container = document.getElementById('cy');
+      if (!container) return;
+
+      const nodes = this.features.map(f => ({
+        data: {
+          id: f.id,
+          label: f.name,
+          reqCount: (f.requirements || []).length,
+          riskCount: (f.risks || []).length,
+          hasRisk: (f.risks || []).some(r => r.severity === 'HIGH' || r.severity === 'CRITICAL'),
+        }
+      }));
+
+      const edges = this.dependencies.map(d => ({
+        data: {
+          id: d.id,
+          source: d.from_feature,
+          target: d.to_feature,
+          inferenceType: d.inference_type,
+          label: d.dependency_type || '',
+        }
+      }));
+
+      if (this.cy) {
+        this.cy.destroy();
+      }
+
+      this.cy = cytoscape({
+        container: container,
+        elements: { nodes, edges },
+        style: [
+          {
+            selector: 'node',
+            style: {
+              'label': 'data(label)',
+              'text-valign': 'center',
+              'text-halign': 'center',
+              'background-color': '#3b82f6',
+              'color': '#ffffff',
+              'text-outline-color': '#3b82f6',
+              'text-outline-width': 2,
+              'font-size': '11px',
+              'font-family': 'Inter, system-ui, sans-serif',
+              'font-weight': 500,
+              'width': 'label',
+              'height': 'label',
+              'padding': '14px',
+              'shape': 'round-rectangle',
+              'border-width': 2,
+              'border-color': '#2563eb',
+              'text-wrap': 'wrap',
+              'text-max-width': '140px',
+            }
+          },
+          {
+            selector: 'node[?hasRisk]',
+            style: {
+              'background-color': '#ef4444',
+              'text-outline-color': '#ef4444',
+              'border-color': '#dc2626',
+            }
+          },
+          {
+            selector: 'node:selected',
+            style: {
+              'background-color': '#1d4ed8',
+              'border-color': '#1e40af',
+              'border-width': 3,
+              'text-outline-color': '#1d4ed8',
+            }
+          },
+          {
+            selector: 'node[?hasRisk]:selected',
+            style: {
+              'background-color': '#b91c1c',
+              'border-color': '#991b1b',
+              'text-outline-color': '#b91c1c',
+            }
+          },
+          {
+            selector: 'edge',
+            style: {
+              'width': 2,
+              'line-color': '#6b7280',
+              'target-arrow-color': '#6b7280',
+              'target-arrow-shape': 'triangle',
+              'curve-style': 'bezier',
+              'arrow-scale': 1.2,
+              'label': 'data(label)',
+              'font-size': '9px',
+              'font-family': 'Inter, system-ui, sans-serif',
+              'text-rotation': 'autorotate',
+              'text-margin-y': -10,
+              'color': '#9ca3af',
+            }
+          },
+          {
+            selector: 'edge[inferenceType = "INFERRED"]',
+            style: {
+              'line-style': 'dashed',
+              'line-dash-pattern': [6, 4],
+              'line-color': '#9ca3af',
+              'target-arrow-color': '#9ca3af',
+            }
+          },
+        ],
+        layout: {
+          name: 'cose',
+          animate: true,
+          animationDuration: 500,
+          nodeRepulsion: function() { return 8000; },
+          idealEdgeLength: function() { return 120; },
+          padding: 40,
+          nodeDimensionsIncludeLabels: true,
+        },
+        userZoomingEnabled: true,
+        userPanningEnabled: true,
+        boxSelectionEnabled: false,
+        autoungrabify: false,
+      });
+
+      this.cy.on('tap', 'node', (evt) => {
+        const nodeId = evt.target.id();
+        this.selectFeatureById(nodeId);
+      });
+
+      this.cy.on('tap', (evt) => {
+        if (evt.target === this.cy) {
+          this.deselectFeature();
+        }
+      });
+    },
+
+    selectFeatureById(featureId) {
+      const feature = this.features.find(f => f.id === featureId);
+      if (feature) {
+        this.selectedFeature = feature;
+        if (this.cy) {
+          this.cy.nodes().unselect();
+          const node = this.cy.getElementById(featureId);
+          if (node) node.select();
+        }
+      }
+    },
+
+    deselectFeature() {
+      this.selectedFeature = null;
+      if (this.cy) {
+        this.cy.nodes().unselect();
+      }
+    },
+
+    getFeatureDeps(featureId) {
+      if (!featureId || !this.dependencies) return [];
+      const deps = [];
+      this.dependencies.forEach(d => {
+        if (d.from_feature === featureId) {
+          deps.push({
+            id: d.id,
+            direction: 'depends on',
+            targetId: d.to_feature,
+            targetName: d.to_feature_name,
+            inference_type: d.inference_type,
+          });
+        }
+        if (d.to_feature === featureId) {
+          deps.push({
+            id: d.id + '-rev',
+            direction: 'required by',
+            targetId: d.from_feature,
+            targetName: d.from_feature_name,
+            inference_type: d.inference_type,
+          });
+        }
+      });
+      return deps;
+    },
+
+    async triggerAnalysis() {
+      this.analyzing = true;
+      this.errorMessage = '';
+      this.statusText = 'Starting analysis...';
+      try {
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]')?.value || '{{ csrf_token }}';
+        const response = await fetch('/api/project/analyze/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': csrfToken,
+          },
+        });
+
+        if (response.status === 409) {
+          this.errorMessage = 'An analysis is already in progress.';
+          this.analyzing = false;
+          return;
+        }
+        if (!response.ok) {
+          throw new Error('Failed to trigger analysis');
+        }
+
+        const data = await response.json();
+        this.statusText = 'Analysis pending...';
+        this.startPolling(data.id);
+      } catch (err) {
+        this.errorMessage = err.message || 'Failed to start analysis';
+        this.analyzing = false;
+        this.statusText = 'Error starting analysis';
+      }
+    },
+
+    startPolling(analysisId) {
+      this.stopPolling();
+      const poll = async () => {
+        try {
+          const response = await fetch('/api/project/analysis/' + analysisId + '/');
+          if (!response.ok) {
+            this.pollTimeout = setTimeout(poll, 3000);
+            return;
+          }
+          const data = await response.json();
+
+          if (data.status === 'PROCESSING') {
+            this.statusText = 'Analysis in progress...';
+            this.pollTimeout = setTimeout(poll, 3000);
+          } else if (data.status === 'COMPLETED') {
+            this.analyzing = false;
+            this.deselectFeature();
+            await this.loadAnalysis();
+          } else if (data.status === 'FAILED') {
+            this.analyzing = false;
+            this.errorMessage = 'Analysis failed: ' + (data.error_message || 'Unknown error');
+            this.statusText = 'Analysis failed';
+          }
+        } catch (err) {
+          this.pollTimeout = setTimeout(poll, 3000);
+        }
+      };
+      this.pollTimeout = setTimeout(poll, 3000);
+    },
+
+    stopPolling() {
+      if (this.pollTimeout) {
+        clearTimeout(this.pollTimeout);
+        this.pollTimeout = null;
+      }
+    },
+  };
+}
+</script>
+{% endblock %}

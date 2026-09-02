@@ -24,3 +24,7 @@ def document_rows_partial(request):
 
 def settings_view(request):
     return render(request, "ui/settings.html", {"active_page": "settings"})
+
+
+def project_map_view(request):
+    return render(request, "ui/project_map.html", {"active_page": "project-map"})

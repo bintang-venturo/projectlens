@@ -8,5 +8,6 @@ urlpatterns = [
     path("", views.chat_view, name="chat"),
     path("documents/partials/rows/", views.document_rows_partial, name="document-rows"),
     path("documents/", views.documents_view, name="documents"),
+    path("project-map/", views.project_map_view, name="project-map"),
     path("settings/", views.settings_view, name="settings"),
 ]

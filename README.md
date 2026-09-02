@@ -104,25 +104,50 @@ uv sync
 uv run python manage.py migrate
 ```
 
-### 6. Start the Celery worker
-
-In a separate terminal:
+### 6. Start all services
 
 ```bash
+python run.py
+```
+
+This starts Docker containers, Celery worker, and Django dev server in one command, then runs health checks to verify everything is working.
+
+The application is now available at `http://localhost:8001` (port 8000 is used by ChromaDB).
+
+#### Service management commands
+
+| Command | Description |
+|---------|-------------|
+| `python run.py` | Start all services + health check |
+| `python run.py --stop` | Stop all services |
+| `python run.py --status` | Check status of all services |
+
+#### What `run.py` does
+
+1. **Docker containers** — starts Postgres, Redis, ChromaDB and waits for each port to be ready
+2. **Celery worker** — kills any stale worker, starts a fresh one, verifies all tasks are registered (including `run_project_analysis`)
+3. **Django server** — starts on port 8001 (configurable via `DJANGO_PORT` env var)
+4. **Health checks** — HTTP check on Django, Redis PING, Postgres readiness, ChromaDB port, Celery task registration, and auto-cleanup of stuck analyses
+
+Logs are written to `logs/django.log` and `logs/celery.log`.
+
+#### Manual startup (alternative)
+
+If you prefer to start services individually in separate terminals:
+
+```bash
+# Terminal 1 — Celery worker
 uv run celery -A config worker --loglevel=info
+
+# Terminal 2 — Django server (use port 8001, since ChromaDB uses 8000)
+uv run python manage.py runserver 8001
 ```
 
-### 7. Start the Django development server
-
-```bash
-uv run python manage.py runserver
-```
-
-The application is now available at `http://localhost:8000`.
+> **Important:** If you add new Celery tasks (e.g. in a new Django app), you must restart the Celery worker for it to pick up the new tasks. A stale worker will silently drop unregistered tasks, leaving background jobs stuck in `PENDING` forever.
 
 ## Web UI
 
-Open `http://localhost:8000` in your browser. The UI has three pages:
+Open `http://localhost:8001` in your browser. The UI has three pages:
 
 | Page | URL | Description |
 |------|-----|-------------|
@@ -139,7 +164,7 @@ The same functionality is also available via the REST API for programmatic acces
 ### Upload a PDF
 
 ```bash
-curl -X POST http://localhost:8000/api/documents/ \
+curl -X POST http://localhost:8001/api/documents/ \
   -F "file=@/path/to/your/document.pdf"
 ```
 
@@ -163,7 +188,7 @@ The document is processed asynchronously by the Celery worker. The status will t
 ### Check document status
 
 ```bash
-curl http://localhost:8000/api/documents/{id}/
+curl http://localhost:8001/api/documents/{id}/
 ```
 
 Wait until `status` is `COMPLETED` before asking questions.
@@ -171,13 +196,13 @@ Wait until `status` is `COMPLETED` before asking questions.
 ### List all documents
 
 ```bash
-curl http://localhost:8000/api/documents/
+curl http://localhost:8001/api/documents/
 ```
 
 ### Ask a question
 
 ```bash
-curl -X POST http://localhost:8000/api/chat/ \
+curl -X POST http://localhost:8001/api/chat/ \
   -H "Content-Type: application/json" \
   -d '{"question": "How much money does each player start with?"}'
 ```
@@ -204,7 +229,7 @@ The answer is generated using only the content from your uploaded documents. Cit
 Send the `session_id` from a previous response to continue the conversation with history:
 
 ```bash
-curl -X POST http://localhost:8000/api/chat/ \
+curl -X POST http://localhost:8001/api/chat/ \
   -H "Content-Type: application/json" \
   -d '{"question": "What denominations is that divided into?", "session_id": "a1b2c3d4-..."}'
 ```

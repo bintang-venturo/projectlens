@@ -1,0 +1,31 @@
+Watching for file changes with StatReloader
+[02/Sep/2026 05:08:02] "GET / HTTP/1.1" 200 23177
+[02/Sep/2026 05:08:15] "GET / HTTP/1.1" 200 23177
+[02/Sep/2026 05:08:16] "GET /static/ui/images/logo.png HTTP/1.1" 200 111735
+[02/Sep/2026 05:08:16] "GET /api/chat/sessions/ HTTP/1.1" 200 8071
+[02/Sep/2026 05:08:18] "GET /project-map/ HTTP/1.1" 200 30382
+[02/Sep/2026 05:08:19] "GET /api/project/analysis/latest/ HTTP/1.1" 200 11340
+[02/Sep/2026 05:08:19] "GET /api/project/analysis/latest/ HTTP/1.1" 200 11340
+[02/Sep/2026 05:08:38] "GET / HTTP/1.1" 200 23177
+[02/Sep/2026 05:08:39] "GET /api/chat/sessions/ HTTP/1.1" 200 8071
+[02/Sep/2026 05:11:48,853] - Broken pipe from ('127.0.0.1', 60675)
+[02/Sep/2026 05:11:48] "GET /project-map/ HTTP/1.1" 200 30382
+[02/Sep/2026 05:11:49] "GET /api/project/analysis/latest/ HTTP/1.1" 200 11340
+[02/Sep/2026 05:11:49] "GET /api/project/analysis/latest/ HTTP/1.1" 200 11340
+[02/Sep/2026 05:11:52] "GET / HTTP/1.1" 200 23177
+[02/Sep/2026 05:11:52] "GET /api/chat/sessions/ HTTP/1.1" 200 8071
+[02/Sep/2026 05:12:47] "GET / HTTP/1.1" 200 23177
+Not Found: /.well-known/appspecific/com.chrome.devtools.json
+[02/Sep/2026 05:12:48] "GET /.well-known/appspecific/com.chrome.devtools.json HTTP/1.1" 404 4232
+[02/Sep/2026 05:12:48] "GET /static/ui/images/logo.png HTTP/1.1" 200 111735
+Not Found: /favicon.ico
+[02/Sep/2026 05:12:48] "GET /favicon.ico HTTP/1.1" 404 4121
+[02/Sep/2026 05:12:48] "GET /api/chat/sessions/ HTTP/1.1" 200 8071
+[02/Sep/2026 06:23:07] "GET /static/ui/images/logo.png HTTP/1.1" 304 0
+[02/Sep/2026 06:23:24] "GET /project-map/ HTTP/1.1" 200 30382
+[02/Sep/2026 06:23:25] "GET /api/project/analysis/latest/ HTTP/1.1" 200 11340
+[02/Sep/2026 06:23:25] "GET /api/project/analysis/latest/ HTTP/1.1" 200 11340
+[02/Sep/2026 06:23:39] "GET / HTTP/1.1" 200 23177
+[02/Sep/2026 06:23:39] "GET /api/chat/sessions/ HTTP/1.1" 200 8071
+[02/Sep/2026 06:23:40] "GET /documents/ HTTP/1.1" 200 15478
+[02/Sep/2026 06:23:40] "GET /documents/partials/rows/ HTTP/1.1" 200 1685

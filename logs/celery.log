@@ -1,0 +1,24 @@
+ 
+ -------------- celery@Bintangs-MacBook-Air.local v5.6.3 (recovery)
+--- ***** ----- 
+-- ******* ---- macOS-14.1.2-arm64-arm-64bit 2026-09-02 05:07:53
+- *** --- * --- 
+- ** ---------- [config]
+- ** ---------- .> app:         config:0x107090da0
+- ** ---------- .> transport:   redis://localhost:6379/0
+- ** ---------- .> results:     redis://localhost:6379/0
+- *** --- * --- .> concurrency: 8 (prefork)
+-- ******* ---- .> task events: OFF (enable -E to monitor tasks in this worker)
+--- ***** ----- 
+ -------------- [queues]
+                .> celery           exchange=celery(direct) key=celery
+                
+
+[tasks]
+  . apps.ingestion.tasks.process_document
+  . apps.intelligence.tasks.run_project_analysis
+
+[2026-09-02 05:07:54,584: INFO/MainProcess] Connected to redis://localhost:6379/0
+[2026-09-02 05:07:54,589: INFO/MainProcess] mingle: searching for neighbors
+[2026-09-02 05:07:55,606: INFO/MainProcess] mingle: all alone
+[2026-09-02 05:07:55,652: INFO/MainProcess] celery@Bintangs-MacBook-Air.local ready.
